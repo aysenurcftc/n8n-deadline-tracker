@@ -1,0 +1,405 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        1328,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Trigger: Daily Reminder Check",
+      "notes": "Runs once a day at 09:00. Every run scans the whole 'Dates' sheet, so no state is needed here — the sheet itself (reminder_1_sent) tracks what's already been notified."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20000000-0000-4000-8000-000000000001",
+              "name": "telegram_chat_id",
+              "value": "REPLACE_WITH_YOUR_CHAT_ID",
+              "type": "string"
+            },
+            {
+              "id": "20000000-0000-4000-8000-000000000002",
+              "name": "reminder_days_before",
+              "value": 1,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1552,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000002",
+      "name": "Config: Reminder Settings",
+      "notes": "Same chat_id as the main workflow — paste your Telegram chat_id here too (this is a separate workflow with its own config). reminder_days_before controls how many days ahead counts as 'due' — currently 1, matching the reminder_1_sent column."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Dates",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sayfa1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1776,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000003",
+      "name": "Sheet: Get All Date Rows",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Reads the whole 'Dates' sheet — same spreadsheet the main workflow writes to. Every row (one per critical date) comes through as one item, including its row_number (needed later to update the right row)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const configItem = $('Config: Reminder Settings').item.json;\nconst chatId = configItem.telegram_chat_id;\nconst daysBefore = Number(configItem.reminder_days_before);\n\n// Compute target date (today + daysBefore) in YYYY-MM-DD, UTC-safe\nconst today = new Date();\nconst target = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));\ntarget.setUTCDate(target.getUTCDate() + daysBefore);\nconst targetDateStr = target.toISOString().slice(0, 10);\n\nconst due = [];\nfor (const item of $input.all()) {\n  const row = item.json;\n  const computedDate = (row.computed_date || '').toString().slice(0, 10);\n  const alreadySent = row.reminder_1_sent === true || row.reminder_1_sent === 'true';\n\n  if (computedDate === targetDateStr && !alreadySent) {\n    due.push({\n      json: {\n        ...row,\n        telegram_chat_id: chatId,\n        target_date: targetDateStr\n      }\n    });\n  }\n}\n\nreturn due;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000004",
+      "name": "Filter: Rows Due Tomorrow",
+      "notes": "Compares each row's computed_date to (today + reminder_days_before). Only rows matching that exact date AND not already marked reminder_1_sent = true pass through. If nothing is due, this returns zero items and the rest of the workflow simply doesn't run for this execution."
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst text = `⏰ *Yarın Son Gün / Tarih Yaklaşıyor*\\n\\n📄 Dosya: ${r.file_name}\\n📌 Tür: ${r.date_type}\\n📅 Tarih: ${r.computed_date}\\n\\n${r.meaning}${(r.needs_human_review === true || r.needs_human_review === 'true') ? '\\n\\n⚠️ Bu tarih daha önce kontrol gerektiriyor olarak işaretlenmişti, lütfen doğrula.' : ''}`;\nreturn [{ json: { text, chat_id: r.telegram_chat_id, id: r.id } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000005",
+      "name": "Build Reminder Message",
+      "notes": "One message per due row. Flags again if the row had needs_human_review set, as an extra nudge to double-check before the deadline."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2448,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000006",
+      "name": "Telegram: Send Reminder",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "Telegram account"
+        }
+      },
+      "notes": "Sends the reminder. Uses the same Telegram bot/credential as the main workflow — select it here too after pasting."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Dates",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sayfa1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Build Reminder Message').item.json.id }}",
+            "reminder_1_sent": "true"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "date_type",
+              "displayName": "date_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "computed_date",
+              "displayName": "computed_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "needs_human_review",
+              "displayName": "needs_human_review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "meaning",
+              "displayName": "meaning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "calendar_event_id",
+              "displayName": "calendar_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "reminder_1_sent",
+              "displayName": "reminder_1_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2672,
+        288
+      ],
+      "id": "10000000-0000-4000-8000-000000000007",
+      "name": "Sheet: Mark Reminder Sent",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Sets reminder_1_sent = true on the matching row, keyed by id. This is what stops tomorrow's run from sending the same reminder again. IMPORTANT: the id is read via $('Build Reminder Message').item.json.id, NOT $json.id — by this point $json is the Telegram node's response (message_id, chat, etc.), not our original data. Any time a node's output overwrites the fields you need, reach back to the node that produced them by name instead of using $json."
+    },
+    {
+      "parameters": {
+        "content": "# ⏰ Daily 1-Day-Before Reminder\n\n**What this workflow does:**\nRuns once a day and checks the same 'Dates' sheet the main document-intake workflow writes to. Any row whose computed_date is exactly `reminder_days_before` days away (currently 1) — and hasn't already been reminded — gets a Telegram message, then gets marked `reminder_1_sent = true` so it's never sent twice.\n\n**Depends on:** the main 'Legal Document Intelligence & Deadline Tracker' workflow, which populates this sheet. This workflow only reads/updates it — it never touches Drive, Groq, or Calendar.\n\n**Config:** chat_id and lead time live in `Config: Reminder Settings`, separate from the main workflow's config.\n\n**To extend to more lead times (e.g. also 7 days before):** duplicate this workflow, change reminder_days_before to 7, and add a reminder_7_sent column back to the sheet.",
+        "height": 380,
+        "width": 560,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        -260
+      ],
+      "id": "10000000-0000-4000-8000-000000000008",
+      "name": "Sticky Note: Workflow Overview"
+    },
+    {
+      "parameters": {
+        "content": "### 1. Read & Filter\nGet every row from the sheet → compute 'tomorrow' (today + reminder_days_before) → keep only rows whose computed_date matches that date AND haven't been reminded yet.",
+        "height": 200,
+        "width": 700,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        450
+      ],
+      "id": "10000000-0000-4000-8000-000000000009",
+      "name": "Sticky Note: Read & Filter"
+    },
+    {
+      "parameters": {
+        "content": "### 2. Notify & Mark Sent\nOne Telegram message per due row → mark that row reminder_1_sent = true so tomorrow's run skips it.",
+        "height": 200,
+        "width": 460,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2224,
+        450
+      ],
+      "id": "10000000-0000-4000-8000-000000000010",
+      "name": "Sticky Note: Notify & Mark Sent"
+    }
+  ],
+  "connections": {
+    "Trigger: Daily Reminder Check": {
+      "main": [
+        [
+          {
+            "node": "Config: Reminder Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config: Reminder Settings": {
+      "main": [
+        [
+          {
+            "node": "Sheet: Get All Date Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet: Get All Date Rows": {
+      "main": [
+        [
+          {
+            "node": "Filter: Rows Due Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Rows Due Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Build Reminder Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reminder Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Send Reminder": {
+      "main": [
+        [
+          {
+            "node": "Sheet: Mark Reminder Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCE_ID"
+  }
+}

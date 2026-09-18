@@ -1,0 +1,1044 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "hour": 10
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "YOUR_DRIVE_FOLDER_ID",
+          "mode": "list",
+          "cachedResultName": "researchs",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/YOUR_DRIVE_FOLDER_ID"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "008455fc-d26a-49ec-937e-eeee8906c7fb",
+      "name": "Trigger: New File in Drive Folder",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        288
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "notes": "Polls the watched Drive folder every hour at :10. Fires once per new file. If you switch to Dropbox, swap this node only — everything downstream stays the same."
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        288
+      ],
+      "id": "c41fe760-1714-408d-9624-f8f7161cc1e6",
+      "name": "Filter: Skip Already-Processed Files",
+      "notes": "Remembers file IDs seen in previous executions (stored in workflow static data). Prevents the same document being processed twice if the trigger fires more than once for the same file."
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1776,
+        288
+      ],
+      "id": "262cda5f-44b2-401e-b5a0-f8933150e230",
+      "name": "Drive: Download File",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "notes": "Downloads the binary content of the new file so it can be inspected and parsed."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fdc1cea4-daa8-4d0f-8e1b-7b951632d21e",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        288
+      ],
+      "id": "edc1f7b1-bc41-4577-856b-652d42f019db",
+      "name": "Filter: Only PDF Files",
+      "notes": "Only PDFs continue down the pipeline. Non-PDF files (e.g. .docx, images) are silently dropped on the false branch — add a branch here later if you want to support other formats."
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        2224,
+        144
+      ],
+      "id": "89cd2d97-07a4-4374-b892-6ef6459aa758",
+      "name": "Extract Text from PDF",
+      "notes": "Converts the PDF binary into plain text. Scanned/image-only PDFs with no text layer will come out empty — OCR is not handled here."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "82d8ddd1-a0ee-461e-990f-e04dcd06abe6",
+              "name": "groq_model",
+              "value": "openai/gpt-oss-120b",
+              "type": "string"
+            },
+            {
+              "id": "904bd7cf-8edd-469b-80f1-d3365dc550a4",
+              "name": "reminder_days",
+              "value": "1",
+              "type": "string"
+            },
+            {
+              "id": "bac35111-84fd-429c-a7fd-1b5e3691ab56",
+              "name": "confidence_threshold",
+              "value": 0.5,
+              "type": "number"
+            },
+            {
+              "id": "518abb11-654d-497c-86e8-ea3bf94a847c",
+              "name": "document_text",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "80f800b0-c4e4-4537-b637-f7d745241a98",
+              "name": "file_name",
+              "value": "={{ $('Trigger: New File in Drive Folder').item.json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "e5b6666c-b961-47c3-9166-137e9d7746a2",
+              "name": "file_id",
+              "value": "={{ $('Trigger: New File in Drive Folder').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "f1a2b3c4-d5e6-4789-a0b1-c2d3e4f5a6b7",
+              "name": "telegram_chat_id",
+              "value": "REPLACE_WITH_YOUR_CHAT_ID",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2448,
+        144
+      ],
+      "id": "e7f2da57-28f6-4b09-a96c-bbefa6d2025e",
+      "name": "Config: Workflow Settings",
+      "notes": "Single place to tune the workflow: AI model, reminder lead time (only 1-day reminder for now), confidence threshold for auto-accepting a computed date, and your Telegram chat_id. Downstream nodes read from here via $('Config: Workflow Settings')."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"model\": $json.groq_model,\n  \"temperature\": 0,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a legal document analysis assistant specialized in Turkish legal and contractual documents (court notices, appeals, objections, contracts).\\n\\nGiven the full text of a document, extract the following and respond with ONLY a valid JSON object — no markdown, no explanation, no preamble.\\n\\nOutput schema:\\n{\\n  \\\"doc_type\\\": \\\"durusma_tebligati | itiraz_bildirimi | temyiz_bildirimi | sozlesme | other\\\",\\n  \\\"parties\\\": [\\\"string\\\", ...],\\n  \\\"summary\\\": \\\"2-3 sentence summary in Turkish of what the document is about and what it requires\\\",\\n  \\\"reference_date\\\": \\\"YYYY-MM-DD or null — the notification/service date (tebliğ tarihi) if present, used to compute relative deadlines\\\",\\n  \\\"critical_dates\\\": [\\n    {\\n      \\\"date_type\\\": \\\"durusma | itiraz_suresi | temyiz_suresi | sozlesme_yenileme\\\",\\n      \\\"quote\\\": \\\"exact text span from the document that mentions this date\\\",\\n      \\\"explicit_date\\\": \\\"YYYY-MM-DD or null if the date is not written explicitly\\\",\\n      \\\"computed_date\\\": \\\"YYYY-MM-DD or null if it cannot be confidently computed\\\",\\n      \\\"confidence\\\": 0.0,\\n      \\\"needs_human_review\\\": true,\\n      \\\"meaning\\\": \\\"short explanation in Turkish of what happens on/by this date\\\",\\n      \\\"reminder_days_before\\\": 7\\n    }\\n  ]\\n}\\n\\nRules:\\n1. Only extract these 4 date types: durusma, itiraz_suresi, temyiz_suresi, sozlesme_yenileme. Ignore all other dates in the document.\\n2. If a date is stated explicitly (e.g. \\\"14.03.2027 tarihinde\\\"), set both explicit_date and computed_date to that value, confidence >= 0.9, needs_human_review: false.\\n3. If a date must be computed from a relative expression (e.g. \\\"tebliğden itibaren 7 gün içinde\\\"), and reference_date is present and unambiguous in the document, compute computed_date = reference_date + N days and set confidence around 0.6-0.7, needs_human_review: true.\\n4. If a relative date cannot be computed with reasonable confidence (missing reference_date, ambiguous wording, unclear whether calendar days or business days), set computed_date to null, confidence below 0.5, needs_human_review: true. Do NOT guess.\\n5. Never silently assume \\\"gün\\\" means business days or calendar days — if the document doesn't specify, lower confidence and flag for human review, since legal deadline miscalculation has real consequences.\\n6. If the document has no relevant critical dates, return an empty critical_dates array.\\n7. Respond in valid JSON only.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"DOCUMENT_TEXT:\\n\\n\" + $json.document_text\n    }\n  ]\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2672,
+        144
+      ],
+      "id": "871555ee-125c-4ecf-b980-6ad22c9c842b",
+      "name": "AI: Extract Dates via Groq",
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_GROQ_CREDENTIAL_ID",
+          "name": "Groq API"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "notes": "Calls Groq to extract doc_type, parties, summary and critical_dates. Retries once automatically on transient failures (timeouts, rate limits). If it still fails, the error output branch sends you a Telegram alert instead of silently stopping."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.choices[0].message.content;\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  throw new Error('Groq returned invalid JSON: ' + raw.slice(0, 200));\n}\nif (!Array.isArray(parsed.critical_dates)) {\n  parsed.critical_dates = [];\n}\nparsed.file_name = $('Config: Workflow Settings').item.json.file_name;\nparsed.file_id = $('Config: Workflow Settings').item.json.file_id;\nparsed.confidence_threshold = $('Config: Workflow Settings').item.json.confidence_threshold;\nparsed.telegram_chat_id = $('Config: Workflow Settings').item.json.telegram_chat_id;\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2896,
+        144
+      ],
+      "id": "16477cd9-c956-4379-8640-9d548ce824fb",
+      "name": "Parse & Validate AI Response",
+      "onError": "continueErrorOutput",
+      "notes": "Parses the AI's JSON reply and guards against malformed output (e.g. AI wraps JSON in markdown, or returns broken JSON). If parsing fails, throws — caught by the error output branch below, which alerts you on Telegram instead of the workflow dying silently."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a1b2c3d4-e5f6-4789-90ab-cdef01234567",
+              "leftValue": "={{ $json.critical_dates.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3120,
+        32
+      ],
+      "id": "b2c3d4e5-f6a7-4890-a1bc-de2345678901",
+      "name": "Filter: Has Critical Dates",
+      "notes": "Guards against empty critical_dates arrays. Without this, an empty array would still flow through Split Out as a single 'ghost' item with all fields undefined, writing a junk row to the sheet. Documents with no dates simply skip the sheet/calendar branch entirely."
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "critical_dates",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3344,
+        -64
+      ],
+      "id": "dd107bdb-4d19-4af1-8a9b-b93973cdff28",
+      "name": "Split: One Item per Critical Date",
+      "notes": "Turns the critical_dates array into individual items — one per date — so each can get its own spreadsheet row and calendar event."
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => {\n  item.json.id = `${item.json.file_id}_${index}`;\n  return item;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3568,
+        -64
+      ],
+      "id": "ebba83da-eb31-4861-aeb9-98cc6bad351f",
+      "name": "Generate Unique Row ID",
+      "notes": "Builds a stable id (fileId_index) used as the matching key for appendOrUpdate in Google Sheets, so re-runs update existing rows instead of duplicating them."
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Dates",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sayfa1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "file_name": "={{ $json.file_name }}",
+            "date_type": "={{ $json.critical_dates.date_type }}",
+            "computed_date": "={{ $json.critical_dates.computed_date }}",
+            "confidence": "={{ $json.critical_dates.confidence }}",
+            "needs_human_review": "={{ $json.critical_dates.needs_human_review }}",
+            "meaning": "={{ $json.critical_dates.meaning }}",
+            "reminder_1_sent": "false"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_type",
+              "displayName": "date_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "computed_date",
+              "displayName": "computed_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "needs_human_review",
+              "displayName": "needs_human_review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "meaning",
+              "displayName": "meaning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "calendar_event_id",
+              "displayName": "calendar_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reminder_1_sent",
+              "displayName": "reminder_1_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3792,
+        -64
+      ],
+      "id": "36352d48-d54a-4b3c-993a-52e47519c77a",
+      "name": "Sheet: Save Critical Date Row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "One row per critical date, keyed by id. appendOrUpdate means re-processing the same file updates existing rows instead of duplicating them. reminder_7_sent removed — only a 1-day-before reminder is planned for the reminder workflow."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2eb8209b-7747-4191-8b9e-770c67523039",
+              "leftValue": "={{ $json.computed_date }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "3656b50d-65d0-4c86-93e1-bc8b6385bcc0",
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": "={{ $('Config: Workflow Settings').item.json.confidence_threshold }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4016,
+        -64
+      ],
+      "id": "d9db2349-faa0-41a4-a8db-f2fe284b24b4",
+      "name": "Filter: Confident Enough for Calendar",
+      "notes": "Only dates with a real computed_date AND confidence above the threshold get a calendar event. Low-confidence / uncomputable dates stay in the sheet flagged needs_human_review, but don't clutter the calendar with guesses."
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "your-calendar-email@gmail.com",
+          "mode": "list",
+          "cachedResultName": "your-calendar-email@gmail.com"
+        },
+        "start": "={{ $json.computed_date }}",
+        "end": "={{ $json.computed_date }}",
+        "additionalFields": {
+          "description": "={{ $json.meaning }}\\n\\nGüven: {{ $json.confidence }}",
+          "summary": "={{ $json.date_type }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        4240,
+        -160
+      ],
+      "id": "39ea4eb0-f1c0-45e4-bed2-2aafd6204ae9",
+      "name": "Calendar: Create Reminder Event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "YOUR_GOOGLE_CALENDAR_CREDENTIAL_ID",
+          "name": "Google Calendar account"
+        }
+      },
+      "notes": "Creates an all-day calendar event for the computed date, so it's visible outside of this workflow too."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Dates",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sayfa1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Generate Unique Row ID').item.json.id}}",
+            "calendar_event_id": "={{ $json.id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "date_type",
+              "displayName": "date_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "computed_date",
+              "displayName": "computed_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "needs_human_review",
+              "displayName": "needs_human_review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "meaning",
+              "displayName": "meaning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "calendar_event_id",
+              "displayName": "calendar_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reminder_1_sent",
+              "displayName": "reminder_1_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4464,
+        -160
+      ],
+      "id": "94e5abeb-d551-41b3-97c1-8490fffca72f",
+      "name": "Sheet: Link Calendar Event ID",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Writes the newly created calendar event's ID back into the matching row, so the future reminder workflow can look up / update the same event if needed."
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\nconst dates = d.critical_dates || [];\n\nlet dateLines;\nif (dates.length === 0) {\n  dateLines = 'Bu belgede kritik tarih tespit edilmedi.';\n} else {\n  dateLines = dates.map(c =>\n    `• ${c.date_type}: ${c.computed_date || 'Hesaplanamadı ❓'} (güven: ${c.confidence})${c.needs_human_review ? ' — ⚠️ Kontrol gerekli' : ''}`\n  ).join('\\n');\n}\n\nconst reviewCount = dates.filter(c => c.needs_human_review).length;\nconst riskNote = dates.length === 0\n  ? ''\n  : reviewCount > 0\n    ? `\\n⚠️ ${reviewCount} tarih manuel kontrol gerektiriyor.`\n    : '\\n✅ Tüm tarihler yeterli güvenle hesaplandı.';\n\nconst text = `📄 *Yeni Belge İşlendi*\\n*Dosya:* ${d.file_name}\\n*Tür:* ${d.doc_type}\\n*Taraflar:* ${(d.parties || []).join(', ') || '—'}\\n\\n*Özet:* ${d.summary}\\n\\n📅 *Kritik Tarihler:*\\n${dateLines}${riskNote}`;\n\nreturn [{ json: { text, chat_id: d.telegram_chat_id } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        288
+      ],
+      "id": "c3d4e5f6-a7b8-4901-b2cd-ef3456789012",
+      "name": "Build Telegram Summary Message",
+      "notes": "Formats the document summary + all critical dates (found or not, reviewed or not) into a single Telegram message. Runs regardless of whether critical dates were found, so nothing gets silently lost."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3344,
+        288
+      ],
+      "id": "d4e5f6a7-b8c9-4012-c3de-f45678901234",
+      "name": "Telegram: Send Document Summary",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "Telegram account"
+        }
+      },
+      "notes": "Sends the per-document summary to your personal Telegram chat."
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $json.error || $json;\nconst errorMessage = typeof err === 'string' ? err : (err.message || JSON.stringify(err).slice(0, 300));\n\nlet fileName = 'Unknown file';\ntry {\n  fileName = $('Config: Workflow Settings').item.json.file_name;\n} catch (e) {}\n\nlet chatId = null;\ntry {\n  chatId = $('Config: Workflow Settings').item.json.telegram_chat_id;\n} catch (e) {}\n\nconst text = `🚨 *Workflow Error*\\nFile: ${fileName}\\nStep: ${$node.name}\\nError: ${errorMessage}`;\n\nreturn [{ json: { text, chat_id: chatId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        480
+      ],
+      "id": "e5f6a7b8-c9d0-4123-d4ef-567890123456",
+      "name": "Build Error Alert Message",
+      "notes": "Catches failures from 'AI: Extract Dates via Groq' (e.g. Groq API down/timeout after retries) and 'Parse & Validate AI Response' (e.g. malformed JSON from the AI). Formats a short alert instead of letting the execution fail silently."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3344,
+        480
+      ],
+      "id": "f6a7b8c9-d0e1-4234-e5f0-678901234567",
+      "name": "Telegram: Send Error Alert",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "Telegram account"
+        }
+      },
+      "notes": "Sends the error alert to the same Telegram chat, so a failed document doesn't just disappear unnoticed."
+    },
+    {
+      "parameters": {
+        "content": "# 📋 Legal Document Intelligence & Deadline Tracker\n\n**What this workflow does:**\nWatches a Google Drive folder for new legal documents (PDF). When a new file lands, it reads the text, sends it to an AI model (Groq) to extract the document type, parties, a short summary, and up to 4 kinds of critical dates (hearing / objection deadline / appeal deadline / contract renewal). Confident, computable dates get a Google Calendar event and a row in the tracking sheet. A Telegram summary is sent for every document, whether or not dates were found. If something breaks (AI call fails, AI returns bad JSON), you get a Telegram error alert instead of a silent failure.\n\n**Sections (left → right):**\n1. **Intake & Dedup** — trigger, skip already-seen files, keep only PDFs\n2. **AI Extraction** — read PDF text, call Groq, validate the JSON it returns\n3. **Per-Date Processing** — one sheet row + one calendar event per confident date\n4. **Telegram Summary** — always fires, regardless of whether dates were found\n5. **Error Handling** — catches AI/parsing failures and alerts you\n\n**Not built yet:** a separate scheduled workflow to send the 1-day-before reminder (reads `reminder_1_sent` in the sheet).\n\n**Config:** all tunable values (AI model, confidence threshold, your Telegram chat_id) live in the `Config: Workflow Settings` node.",
+        "height": 460,
+        "width": 620,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        -700
+      ],
+      "id": "a0000000-0000-4000-8000-000000000001",
+      "name": "Sticky Note: Workflow Overview"
+    },
+    {
+      "parameters": {
+        "content": "### 1. Intake & Dedup\nNew file comes in → skip if we've already processed this file ID before → keep only PDFs, drop everything else.",
+        "height": 220,
+        "width": 700,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        460
+      ],
+      "id": "a0000000-0000-4000-8000-000000000002",
+      "name": "Sticky Note: Intake & Dedup"
+    },
+    {
+      "parameters": {
+        "content": "### 2. AI Extraction\nExtract PDF text → set config values (model, thresholds, chat_id) → call Groq → parse/validate its JSON reply.\n\n⚠️ If the AI call fails or returns broken JSON, this branches to the error alert below instead of stopping the workflow.",
+        "height": 220,
+        "width": 700,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2224,
+        -60
+      ],
+      "id": "a0000000-0000-4000-8000-000000000003",
+      "name": "Sticky Note: AI Extraction"
+    },
+    {
+      "parameters": {
+        "content": "### 3. Per-Date Processing\nOnly runs if critical_dates is non-empty. One item per date → save to sheet (appendOrUpdate, so re-runs don't duplicate) → only dates that are both computed AND above the confidence threshold get a calendar event → event ID written back to the sheet.\n\nLow-confidence / needs_human_review dates still land in the sheet, just without a calendar event — check them manually.",
+        "height": 260,
+        "width": 900,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        -420
+      ],
+      "id": "a0000000-0000-4000-8000-000000000004",
+      "name": "Sticky Note: Per-Date Processing"
+    },
+    {
+      "parameters": {
+        "content": "### 4. Telegram Summary\nRuns for every document, no matter what — even if no critical dates were found. This is your always-on notification that a file was processed.",
+        "height": 190,
+        "width": 440,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        130
+      ],
+      "id": "a0000000-0000-4000-8000-000000000005",
+      "name": "Sticky Note: Telegram Summary"
+    },
+    {
+      "parameters": {
+        "content": "### 5. Error Handling\nCatches failures from the two riskiest steps: the Groq API call and JSON parsing. Formats a short alert (file name, which step failed, error message) and sends it to the same Telegram chat, so a broken document never fails silently.",
+        "height": 190,
+        "width": 440,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        590
+      ],
+      "id": "a0000000-0000-4000-8000-000000000006",
+      "name": "Sticky Note: Error Handling"
+    }
+  ],
+  "connections": {
+    "Trigger: New File in Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "Filter: Skip Already-Processed Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Skip Already-Processed Files": {
+      "main": [
+        [
+          {
+            "node": "Drive: Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: Download File": {
+      "main": [
+        [
+          {
+            "node": "Filter: Only PDF Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Only PDF Files": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text from PDF": {
+      "main": [
+        [
+          {
+            "node": "Config: Workflow Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config: Workflow Settings": {
+      "main": [
+        [
+          {
+            "node": "AI: Extract Dates via Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Extract Dates via Groq": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Error Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate AI Response": {
+      "main": [
+        [
+          {
+            "node": "Filter: Has Critical Dates",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Telegram Summary Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Error Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Has Critical Dates": {
+      "main": [
+        [
+          {
+            "node": "Split: One Item per Critical Date",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Split: One Item per Critical Date": {
+      "main": [
+        [
+          {
+            "node": "Generate Unique Row ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Unique Row ID": {
+      "main": [
+        [
+          {
+            "node": "Sheet: Save Critical Date Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet: Save Critical Date Row": {
+      "main": [
+        [
+          {
+            "node": "Filter: Confident Enough for Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Confident Enough for Calendar": {
+      "main": [
+        [
+          {
+            "node": "Calendar: Create Reminder Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Calendar: Create Reminder Event": {
+      "main": [
+        [
+          {
+            "node": "Sheet: Link Calendar Event ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram Summary Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Document Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Error Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCE_ID"
+  }
+}
