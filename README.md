@@ -1,7 +1,10 @@
 # Legal Document Intelligence & Deadline Tracker (n8n)
 
+
 Watches a Google Drive folder for new legal PDFs, uses an AI model (Groq) to extract critical dates (hearing, objection deadline, appeal deadline, contract renewal), logs them to Google Sheets, creates Calendar events for confident dates, and notifies you on Telegram — including a 1-day-before reminder.
 
+![workflow-1](https://github.com/aysenurcftc/n8n-deadline-tracker/blob/main/workflows/workflow-1.jpg)
+![workflow-2](https://github.com/aysenurcftc/n8n-deadline-tracker/blob/main/workflows/workflow-2.jpg)
 ## Workflows
 
 | File | Trigger | What it does |
